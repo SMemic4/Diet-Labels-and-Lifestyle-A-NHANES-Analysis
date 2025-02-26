@@ -1,0 +1,52 @@
+---
+title: "Diet, Labels, and Lifestyle: A NHANES Analysis"
+subtitle: ''
+date: last-modified
+format:
+  html:
+    #css: styles.css
+    toc: true
+    number-sections: true
+    date-format: iso
+    embed-resources: true
+    code-overflow: wrap
+    theme: default
+---
+
+# Setup and Data Ingest
+## Initial Setup and Loading Package
+
+```{r Setup}
+
+knitr::opts_chunk$set(warning = FALSE)
+
+```
+
+```{r Libraries}
+#| message: false
+
+
+library(nhanesA) 
+library(Hmisc)
+library(janitor)
+library(naniar)
+library(sessioninfo)
+library(car)
+library(mosaic)
+suppressPackageStartupMessages(library(here))
+library(gt)
+library(glue)
+library(patchwork)
+library(broom)
+library(rstatix)
+library(tidyverse)
+
+
+theme_set(theme_bw())
+knitr::opts_chunk$set(comment = NA, warning = FALSE)
+options(dplyr.summarise.inform = FALSE)
+
+```
+
+## Loading the Raw Data
+
