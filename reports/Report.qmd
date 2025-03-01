@@ -32,6 +32,8 @@ library(Hmisc)
 library(MKinfer)
 library(janitor)
 library(naniar)
+library(Epi)
+library(epiR)
 library(FSA)
 library(sessioninfo)
 library(car)
@@ -973,33 +975,87 @@ Interestingly, individuals who never read nutrition labels had a lower median BM
 Overall, the results suggest that nutrition label reading frequency is associated with differences in BMI, but the relationship may not be strictly linear. Further research is needed to explore the underlying factors driving these differences, such as dietary habits, health awareness, or socioeconomic influences.
 
 
+# Analysis D: Drinking Habitis between Genders
+
+## The Question
+
+We are interested in the association between a subject's gender and whether they have ever experienced a period in their life where they consumed multiple alcoholic drinks daily. The variable `RIAGENDR` represents gender, with two levels: male and female. To assess heavier drinking habits, we will use the variable `ALQ151`, a categorical variable with two levels: "Yes" and "No", based on whether the respondent reported consuming four or five alcoholic drinks almost every day at some point in their life. To analyze this association, we will construct a 2x2 contingency table, apply a Bayesian augmentation, and calculate 90% confidence intervals for the proportional probabilities.
+
+Our research question is there a difference in the proportion of males and females who report having consumed four or five alcoholic drinks almost every day at some point in their life?
+
+### The 2x2 Table
+
+The 2x2 table with `RIAGENDR` and `ALQ151`:
+
+```{r table of alcohol and geender}
+
+NH_data_imp %>% tabyl(RIAGENDR, ALQ151) %>% 
+                adorn_totals(where = "row") %>% 
+                adorn_percentages(denominator = "row") %>% 
+                adorn_pct_formatting() %>% 
+                adorn_ns(position = "front") %>%
+                adorn_title(placement = "combined") %>% 
+                gt() %>% 
+                tab_options(table.width = pct(75)) %>% 
+                cols_align(align = "center")
 
 
+```
+
+The contingency table presents the distribution of self-reported heavy drinking behavior (`ALQ151`) by gender (`RIAGENDR`). Overall, 15.5% of respondents reported having consumed four or five alcoholic drinks almost every day at some point in their life, while 84.5% did not.
+
+Among males, 22.7% (862 out of 3,794) reported engaging in heavy drinking at some point, compared to only 8.7% (352 out of 4,059) of females. This suggests that males are more than twice as likely as females to report past heavy drinking behavior. Conversely, the proportion of respondents who answered "No" is higher among females (91.3%) than males (77.3%), indicating that a greater percentage of women report never having engaged in heavy drinking.
+
+These proportions suggest a potential association between gender and heavy drinking behavior, with males being more likely to report a history of frequent alcohol consumption. Further statistical analysis is needed to determine whether this observed difference is statistically significant.
+
+### Checking Assumptions
+
+Before interpreting the results of our chi-square test, we must ensure that key assumptions are met:
+
+* Independence of Observations
+** Each subject contributes to only one cell in the contingency table, meaning observations are independent and do not overlap across categories.
+
+* Expected Cell Counts
+** Two-by-two analyses, including the calculation of relative risk (RR) and odds ratios (OR), require sufficiently large sample sizes in each cell to produce reliable estimates.
+** All cells contain well above the commonly recommended threshold of ≥5 expected counts, ensuring the stability of our estimates.
+
+* Sufficient Sample Size
+** Since we used a Bayesian-augmented approach, exact confidence intervals were computed for RR, OR, and probability differences, mitigating concerns about small sample bias.
+** With a total of 7,853 subjects, our analysis meets the requirements for accurate inference
 
 
+Since these assumptions are satisfied, we can confidently interpret the estimated relative risk, odds ratios, and probability differences.
+
+## Main Analysis
+
+A two by two table with a Bayesian augmentation will be used to assess if there is an association between `RIAGENDR` and `ALQ151`
+
+```{r Two by Two analysis}
+
+twoby2(matrix(c(862, 352, 2932, 3707), nrow = 2, byrow = TRUE), 
+       conf.level = 0.95)
 
 
+```
+
+A Bayesian-augmented two-by-two table analysis was conducted to examine the association between gender (`RIAGENDR`) and self-reported past heavy drinking (`ALQ151`), defined as consuming four or five alcoholic drinks almost every day at some point in life.
+
+The probability of a male reporting past heavy drinking is 0.710 (71.0%), with a 95% confidence interval of (0.6839, 0.7349). In contrast, the probability for females is 0.4416 (44.2%), with a 95% confidence interval of (0.4297, 0.4536). This suggests that males are more likely than females to report a history of heavy alcohol consumption.
+
+The relative risk (RR) of reporting past heavy drinking for males compared to females is 1.6078, meaning that males are approximately 1.61 times more likely to report this behavior (95% CI: 1.5371, 1.6818). Additionally, the odds ratio (OR) is 3.0962, indicating that the odds of reporting heavy drinking are over three times higher for males than females (95% CI: 2.7103, 3.5369). The conditional MLE odds ratio, a more precise estimate, is 3.0957 (95% CI: 2.7057, 3.5472).
+
+The absolute probability difference between males and females is 0.2684 (26.8%), with a 95% confidence interval of (0.2397, 0.2960). This represents the estimated difference in heavy drinking prevalence between the two groups. Finally, the exact p-value and asymptotic p-value are both < 0.0001, providing very strong statistical evidence that gender is significantly associated with self-reported past heavy drinking behavior. These findings highlight a notable gender disparity, with males being significantly more likely to report a history of frequent heavy drinking
 
 
+## Conclusions
+
+The confidence intervals for both males and females do not overlap, indicating a substantial difference in the estimated probability of reporting past heavy drinking when comparing the two genders. The relative risk (RR) of having reported heavy drinking for males versus females was estimated to be 1.61, with a 95% confidence interval of (1.537, 1.682). This suggests that males are approximately 1.61 times more likely to report a history of frequent heavy drinking compared to females. The odds ratio (OR) was estimated to be 3.10, with a 95% confidence interval of (2.710, 3.537), reinforcing that males have significantly higher odds of reporting past heavy drinking behavior. The probability difference between males and females was estimated to be 0.268 (26.8%), with a 95% confidence interval of (0.240, 0.296), further demonstrating the gender disparity in reported drinking habits. The exact p-value was <0.0001, providing strong statistical evidence that gender and heavy drinking history are significantly associated.
+
+A limitation of our analysis is that for the female subjects who reported a history of heavy drinking, the conditional probability was 0.4416 (44.2%), with a 95% confidence interval of (0.4297, 0.4536). While we utilized a Bayesian augmentation to provide more precise estimates for proportions and confidence intervals, the accuracy of this method depends on having sufficiently large sample sizes per group and probability estimates within a reasonable range (10%–90%). Given our large overall sample size (7,853 subjects), these concerns may have been mitigated, but further sampling with more balanced group probabilities would strengthen the validity of this association.
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+# Analysis 4: 
+## The Question
 
 
 
