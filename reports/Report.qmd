@@ -26,7 +26,7 @@ knitr::opts_chunk$set(warning = FALSE)
 #| message: false
 
 
-library(nhanesA) 
+library(haven)
 library(Hmisc)
 library(janitor)
 library(naniar)
@@ -49,4 +49,645 @@ options(dplyr.summarise.inform = FALSE)
 ```
 
 ## Loading the Raw Data
+
+
+```{r LoadingData}
+
+# Load and Save P_DEMO (Demographics Data)
+demo_raw <- read_xpt(here("data", "raw", "P_DEMO.XPT"))
+saveRDS(demo_raw, here("data", "processed", "P_DEMO.Rds"))
+demo_raw <- readRDS(here("data", "processed", "P_DEMO.Rds"))
+
+# Load and Save P_DR2TOT (Protein Consumption Data)
+protein_raw <- read_xpt(here("data", "raw", "P_DR2TOT.XPT"))
+saveRDS(protein_raw, here("data", "processed", "P_DR2TOT.Rds"))
+protein_raw <- readRDS(here("data", "processed", "P_DR2TOT.Rds"))
+
+# Load and Save P_CBQPFA (Nutrition Label Use Data)
+nut_raw <- read_xpt(here("data", "raw", "P_CBQPFA.XPT"))
+saveRDS(nut_raw, here("data", "processed", "P_CBQPFA.Rds"))
+nut_raw <- readRDS(here("data", "processed", "P_CBQPFA.Rds"))
+
+# Load and Save P_BMX (BMI Data)
+bmi_raw <- read_xpt(here("data", "raw", "P_BMX.XPT"))
+saveRDS(bmi_raw, here("data", "processed", "P_BMX.Rds"))
+bmi_raw <- readRDS(here("data", "processed", "P_BMX.Rds"))
+
+# Load and Save P_ALQ (Alcohol Consumption Data)
+alc_raw <- read_xpt(here("data", "raw", "P_ALQ.XPT"))
+saveRDS(alc_raw, here("data", "processed", "P_ALQ.Rds"))
+alc_raw <- readRDS(here("data", "processed", "P_ALQ.Rds"))
+
+```
+
+## Contents of the Raw Tibbles
+
+Five tibbles were successfully loaded, each containing a subset of variables that will be used in the final analysis. Below, we verify the dimensions of each dataset to ensure they contain the expected number of observations and variables.
+
+```{r Dim1}
+
+dim(demo_raw)
+
+```
+
+The `demo_raw` contains 15560 rows and 29 variables.
+
+```{r Dim2}
+
+dim(protein_raw)
+
+```
+
+The dataset `protein_raw` contains 14300 rows and 85 variables.
+
+```{r Dim3}
+
+dim(nut_raw)
+
+```
+
+The dataset `nut_raw` contains 8552 rows and 66 variables.
+
+```{r Dim4}
+
+dim(bmi_raw)
+
+```
+
+The dataset `bmi_raw` contains 14300 rows and 22 variables.
+
+```{r Dim5}
+
+dim(alc_raw)
+
+```
+
+The dataset `alc_raw` contains 8965 rows and 10 variables.
+
+## Merging the Data
+
+To ensure all variables are stored within a single tibble, the data sets will be merged by their common column, `SEQN` which is a unique numerical identifier for each subject.
+
+```{r MergingTibbles}
+
+comdata <- left_join(demo_raw, protein_raw, by = "SEQN")
+comdata2 <- left_join(comdata, nut_raw, by = "SEQN")
+comdata3 <- left_join(comdata2, bmi_raw, by = "SEQN")
+comdata4 <- left_join(comdata3, alc_raw, by = "SEQN")
+
+dim(comdata4)
+
+```
+
+Previously, the data sets contained a total of 212 variables (29 + 85 + 66 + 22 + 10). After merging, the final dataset contains 208 variables. This reduction occurs because `SEQN` is present in all five data sets and is used as the key to merge them. Since each merge retains only one instance of `SEQN`, a total of four duplicate columns are removed, leading to (212 - 4) = 208 columns in the final merged dataset.
+
+## Checking the Merge
+
+To verify that each row represents a unique individual, we will check whether the number of unique `SEQN` identifiers matches the total number of rows in the merged dataset.
+
+```{r ensuring rows match the number of unique SEQN identifiers}
+
+identical(n_distinct(comdata4$SEQN), comdata4 %>% nrow())
+
+```
+
+If the output returns TRUE, this confirms that each row correctly corresponds to one unique `SEQN` value, ensuring there are no duplicate subject entries.
+
+## Selecting the Variables
+
+The merged dataset, `comdata4`, contains over 200 variables, but not all will be used in the final analysis. We will retain only those variables that are essential for analysis, subject identification, and further data cleaning.
+
+```{r Slecting the correct variables}
+
+NH_data <- comdata4 %>% select(SEQN, RIDAGEYR, RIDSTATR, RIAGENDR, DR2TPROT, DBQ750, BMXBMI, DMDEDUC2, ALQ151)
+
+```
+
+We have selected the variables:
+
+-   `SEQN` - Unique identifier for each subject.
+-   `RIDAGEYR` and `RIDSTATR` -  Used to define the population of interest.
+-   `RIAGENDR`, `DR2TPROT`, `DBQ750`, `BMXBMI`, `DMDEDUC2`, `ALQ151` - Variables for analysis
+
+# Cleaning the Data
+
+## The Variables
+
+There are nine variables that will be used.
+
+### Identification and Population Variables
+
+1.  `SEQN` - The unique identification number assigned to each subject.
+
+### Quantitative Variables
+
+2.  `RIDAGEYR` - The subjects age, in years
+3.  `DR2TPROT` – The subject’s total protein consumption, measured in grams.
+4.  `BMXBMI` - The subjects body mass index, in kg/m^2^
+
+### Binary Variables
+
+5.  `RIDSTATR`  – The subject’s examination and interview status: (Interview Only, Interview and examination Complete)
+6.  `RIAGENDR` - The subjects gender (Male, female)
+7.  `ALQ151` – Response to the question: "*Have you ever in a point in your life had 4 or 5 drinks every day?*" (Yes, No)
+
+### Multi-Categorical Variables
+
+8.  `DBQ750` – How often the subject reads nutrition labels before purchasing food (Always, Most of the time, Sometimes, Rarely, Never)
+9.  `DMDEDUC2` - The subject’s highest level of education completed ("Less Than 9th Grade, 9-11th Grade, High School/GED or Equivalent, Some College or AA degree, College Graduate or above)
+
+## Labeling Factors
+
+All categorical variables (`RIAGENDR`, `RIDSTATR`, `DMDEDUC2`, `DBQ750`, `ALQ151`) will be converted from numeric values to factors for better interpret ability. Additionally, any categorical variable with values 7 or 9 (indicating "I don't know" or refusal to answer) will be treated as missing values.
+
+```{r Labeling factors}
+
+NH_data <- NH_data %>% mutate(SEQN = as.character(SEQN),
+                 RIAGENDR = factor(RIAGENDR, levels = c(1,2), labels = c("Male", "Female")),
+                 RIDSTATR = factor(RIDSTATR, levels = c(1, 2), labels = c("Missing Examination", "Completed Examination and Interview")),
+                 DMDEDUC2 = factor(DMDEDUC2, levels = c(1,2,3,4,5), labels = c("Less Than 9th Grade", "9-11th Grade", "High School/GED or Equivalent", "Some College or AA degree", "College Graduate or above")),
+                 DBQ750 = factor(DBQ750, levels = c(1,2,3,4,5), labels = c("Always", "Most of the time", "Sometimes", "Rarely", "Never")),
+                 ALQ151 = factor(ALQ151, levels = c(1,2), labels = c("Yes", "No")))
+```
+
+`SEQN` was converted to a character type to maintain it as a unique identifier rather than a numeric value.
+
+## Filtering for Population of Interest
+
+The dataset `NH_data` will be filtered to include only subjects who meet the following criteria:
+
+* Age between 21 and 79 years (`RIDAGEYR`)
+
+* Completed both the NHANES examination and interview (`RIDSTATR`)
+
+```{r Filtering the data}
+
+NH_data <- NH_data %>% filter(RIDAGEYR >= 21 & RIDAGEYR != 80, RIDSTATR == "Completed Examination and Interview")
+nrow(NH_data)
+
+```
+
+After applying these filters, the `NH_data` tibble now contains 7,853 observations.
+
+## Checking the Quantitative Variables
+
+The `NH_data` dataset contains three quantitative variables:
+
+* `RIDAGEYR` – Age of the subject (in years).
+* `DR2TPROT` – Total protein consumption (in grams).
+* `BMXBMI` – Body mass index (BMI) (in kg/m²).
+
+To ensure these variables have plausible values and to assess the number of missing values, we generate summary statistics:
+
+```{r Quant_check}
+
+df_stats(~ RIDAGEYR + DR2TPROT + BMXBMI,  data = NH_data) %>% gt() %>% 
+  tab_options(table.width = pct(75)) %>% 
+  cols_align(align = "center") %>% fmt_number(decimals = 2, columns = c(2:8))
+
+```
+
+The `RIDAHEYR` stat correctly displays that our data contains only adults between the ages of 21 and 79 years of age with no missing values. `DR2TPROT` and `BMXBMI` both display a plausible range of values. There are 1675 missing values for `DR2TPROT` and 118 missing values for `BMXBMI`. These missing values will be considered when conducting further analysis.
+
+## Checking Binary Variables
+
+The `NH_data` dataset contains three binary variables:
+
+* `RIDSTATR` – Examination and interview completion status.
+* `RIAGENDR` – Gender of the subject.
+* `ALQ151` – Response to the question: "Have you ever, at any point in your life, had 4 or 5 drinks every day?"
+
+We will verify that these variables contain correct values and assess the number of missing values.
+
+### The `RIDSTATR` Variable
+
+The `RIDSTATR` has two levels:
+
+* "Missing Examination"
+* "Completed Examination and Interview".
+
+Since we filtered the dataset to include only subjects who completed both, we will verify that this filtering was applied correctly.
+
+```{r RIDSTATR variable check}
+
+NH_data %>% tabyl(RIDSTATR) %>% gt() %>% 
+  tab_options(table.width = pct(75)) %>% 
+  cols_align(align = "center")
+
+```
+
+There are no subjects with a *"Missing Examination"* and the number of subjects who completed the examination and interview corresponds to the number of rows in the `NH_data` tibble (7853 observations). This confirms that our filtering was applied correctly.
+
+### The `RIAGENDR` Variable
+
+The `RIAGENDR` variable represents the gender of each subject and has two levels:
+
+* Male
+* Female
+
+We will check for any missing values in this variable.
+
+```{r RIAGENDR variable }
+
+NH_data %>% tabyl(RIAGENDR) %>% gt() %>% 
+  tab_options(table.width = pct(75)) %>% 
+  cols_align(align = "center") %>% fmt_number(decimals = 2, columns = 3)
+
+```
+
+The dataset contains 3,794 males and 4,059 females. There are no missing values for gender, confirming that every subject has their gender recorded.
+
+### The `ALQ151` Variable
+
+The ALQ151 variable represents responses to the question:
+*"Have you ever, at any point in your life, had 4 or 5 drinks every day?"*
+
+It has two levels:
+
+* *"Yes"*
+* *"No"*
+
+```{r ALQ151 check }
+
+NH_data %>% tabyl(ALQ151) %>% gt() %>% 
+  tab_options(table.width = pct(75)) %>% 
+  cols_align(align = "center") %>% fmt_number(decimals = 2, columns = c(3:4))
+
+```
+
+1,061 subjects responded *"Yes"*. 5,633 subjects responded *"No"*. A total of 6,694 subjects provided a response. There are 1,159 missing values for this variable.
+
+## Checking Multi-Categorical Variables
+
+The `NH_data` dataset contains two multi-categorical variables:
+
+* *DBQ750* – Frequency of reading nutrition labels before purchasing food.
+* *DMDEDUC2* – Highest level of education completed.
+
+We will check the number of observations for each level of these variables and assess the number of missing values.
+
+### The `DBQ750` Variable
+
+The *DBQ750* variable represents how often a subject reads nutrition labels before purchasing food. It has five levels:
+
+* *Always*
+* *Most of the time*
+* *Sometimes*
+* *Rarely*
+* *Never*
+
+We will check the distribution of responses and assess the number of missing values.
+
+```{r DBQ750 check}
+
+NH_data %>% tabyl(DBQ750) %>% gt() %>% 
+  tab_options(table.width = pct(75)) %>% 
+  cols_align(align = "center") %>% fmt_number(decimals = 2, columns = c(3:4))
+
+```
+
+5,783 subjects provided a response for `DBQ750`. 2,070 subjects have missing values for this variable.
+
+### The `DMDEDUC2` Variable
+
+The DMDEDUC2 variable represents the highest level of education completed by each subject. It has five levels:
+
+* *Less Than 9th Grade*
+* *9-11th Grade*
+* *High School/GED or Equivalent*
+* *Some College or AA Degree*
+* *College Graduate or Above*
+
+We will check the distribution of responses and assess the number of missing values.
+
+```{r DMDEDUC2 check}
+
+NH_data %>% tabyl(DMDEDUC2) %>% gt() %>% 
+  tab_options(table.width = pct(75)) %>% 
+  cols_align(align = "center") %>% fmt_number(decimals = 2, columns = c(3:4))
+
+```
+
+7,845 subjects provided a response for DMDEDUC2.The level with the fewest responses is "Less Than 9th Grade" with 602 subjects. There are 8 missing values for this variable.
+
+## Creating the Analytic Tibble
+
+The `NH_data` tibble will be updated to retain only the variables necessary for the four upcoming analyses, along with the unique subject identifier (`SEQN`).
+
+```{r Selecting the analytical variables}
+
+NH_data <- NH_data %>% select(SEQN, RIAGENDR:ALQ151)
+dim(NH_data)
+
+```
+
+The updated `NH_data` tibble now contains:
+
+* 7 variables (columns)
+* 7,853 observations (rows)
+
+This tidy dataset ensures that only the relevant variables are retained for further analysis.
+
+## Listing of Missing Values
+
+Before proceeding with the analysis, we will check which variables contain missing values and determine the number of missing observations for each.
+
+```{r Missing sum check}
+
+miss_var_summary(NH_data) %>% gt() %>% 
+  tab_options(table.width = pct(75)) %>% 
+  cols_align(align = "center") %>% fmt_number(decimals = 2, columns = 3)
+
+```
+
+Overall there are five variables with missing values:
+
+*   `DBQ750` - 2070 missing values
+*   `DR2TPROT` - 1675 missing values
+*   `ALQ151` - 1159 missing values
+*   `BMXBMI` - 117 missing values
+*   `DMDEDUC2` - 8 missing values
+
+# Codebook and Data Description
+
+## Codebook
+
+The following codebook provides information about the seven variables in the tidy dataset `NH_data`. The "Type" column indicates whether a variable is character, quantitative, or categorical. For categorical variables, the number of levels is specified. The number of missing values is shown in brackets for variables that contain missing data. The "Description and Levels" column explains what each variable represents and, if applicable, lists its levels.
+
+|   Variable |      Type      | Description and Levels                                                                                                                                                       |
+|------------------:|:-----------------:|-----------------------------------|
+|     `SEQN` |   Character    | Respondent identification number                                                                                                                                             |
+| `RIAGENDR` | Categorical- 2 | Male, female: The subjects gender                                                                                                                                            |
+| `DR2TPROT` |  Quantitative  | Total protein consumption over twenty-four hours in grams \[**1675 NA**\]                                                                                                    |
+|   `DBQ750` | Categorical-5  | Always, Most of the time, Sometimes, Rarely, Never: How often do you read the nutrition label before purchasing a food item? \[**2070 NA**\]                                 |
+|  `BMXBMIL` |  Quantitative  | The subjects body mass index, in kg/m^2^ \[**117 NA**\]                                                                                                                      |
+| `DMDEDUC2` | Categorical-5  | Less Than 9th Grade, 9-11th Grade, High School/GED or Equivalent, Some College or AA degree, College Graduate or above: The subjects highest level of education \[**8 NA**\] |
+|   `ALQ151` | Categorical- 2 | Yes, no: Have you ever had a period in your life where you consumed 4 or 5 drinks almost every day? \[**1159** **NA**\]   
+
+
+## Analytic Tibble
+
+The following check shows that the `NH_data` tibble is in a tibble data structure:
+
+```{r Analytical tibble}
+
+NH_data
+
+```
+
+Further confirmatory check
+
+```{r is tibble}
+
+is_tibble(NH_data)
+
+
+```
+
+## Data Summary
+
+The following is a summary of the `NH_data` tibble, filtered to include only the specific population of interest and the relevant variables for analysis.
+
+```{r Summary of the data}
+
+NH_data %>% describe()
+
+```
+
+# Analysis B: Comparing Two Means with Independent Samples
+
+## The Question
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
