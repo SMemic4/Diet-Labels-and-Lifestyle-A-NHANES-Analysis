@@ -27,9 +27,12 @@ knitr::opts_chunk$set(warning = FALSE)
 
 
 library(haven)
+library(mice)
 library(Hmisc)
+library(MKinfer)
 library(janitor)
 library(naniar)
+library(FSA)
 library(sessioninfo)
 library(car)
 library(mosaic)
@@ -454,99 +457,520 @@ NH_data %>% describe()
 
 ```
 
-# Analysis B: Comparing Two Means with Independent Samples
+# Imputation
+
+To address missing values in the dataset, we applied multiple imputation using the `mice` package. This approach was chosen to minimize bias and preserve statistical power, as complete-case analysis could lead to a substantial loss of data. Analyzing the patterns of missingness suggested that data were primarily Missing at Random (MAR), meaning the probability of missingness was related to observed variables rather than being completely random. Given this, imputation was performed separately for numerical and categorical variables: Predictive Mean Matching (PMM) was used for continuous variables (`DR2TPROT`, `BMXBMI`), logistic regression was applied to binary variables (`ALQ151`), and multinomial logistic regression was used for multi-category variables (`DBQ750`, `DMDEDUC2`). Five imputed data sets were generated, and a completed dataset was extracted for analysis. Post-imputation checks confirmed that the imputed values aligned with observed distributions, ensuring that the process did not introduce artificial distortions.
+
+```{r MissingPattern}
+
+md.pattern(NH_data)
+
+
+```
+Defining the imputation method for each variable.
+
+
+```{r ImpStrat}
+
+impute_methods <- make.method(NH_data)
+
+impute_methods["SEQN"] <- ""
+impute_methods["DR2TPROT"] <- "pmm"   
+impute_methods["BMXBMI"] <- "pmm"    
+impute_methods["ALQ151"] <- "logreg"   
+impute_methods["DBQ750"] <- "polyreg" 
+impute_methods["DMDEDUC2"] <- "polyreg" 
+
+
+```
+
+Multiple imputation will be down using 5 imputed data sets
+
+```{r ImputationModel}
+
+imp_model <- mice(NH_data, method = impute_methods, m = 5, seed = 444)
+
+
+```
+```{r SummaryoftheImputation}
+
+summary(imp_model)
+
+```
+
+```{r DenImp1}
+
+densityplot(imp_model, ~DR2TPROT)
+
+```
+To assess the effectiveness of our multiple imputation process, we generated density plots comparing the distribution of observed and imputed values for `DR2TPROT` (total protein consumption). The plot shows that the imputed values (red lines) closely align with the observed data (blue line), indicating that the imputation method preserved the original data structure well. There are no significant deviations, suggesting that the imputation did not introduce bias.There are slight varriations that appear on the right tail of the distribution, but this occurs due to the selected of Predictive Mean Matching (PPM), which selected imputed values based on real observations. Overall, the imputed values maintain the integrity of the original dataset, supporting the choice of the imputation method. 
+
+
+
+```{r DenImp2}
+
+densityplot(imp_model, ~BMXBMI)
+
+```
+
+The density plot for `BMXBMI` (Body Mass Index) compares the distribution of observed values (blue line) with the imputed values (red lines) across multiple imputed data sets. The imputed values closely follow the observed distribution, indicating that the Predictive Mean Matching (PMM) method successfully captured the overall data structure. There is a slight increase in variability among the imputed data sets, particularly in the higher BMI range, but this is expected given the natural spread of BMI values and the small number of extreme cases. Importantly, no major deviations or unrealistic patterns are observed, confirming that the imputation process preserved the integrity of the original data while effectively handling missing values.
+
+
+
+
+```{r}
+
+stripplot(imp_model, DR2TPROT, pch = 20, cex = 1.2)
+
+```
+
+The strip plot for `DR2TPROT` visualizes the distribution of observed values and imputed values (red) across the five data sets. The imputed values are well integrated with the observed data following a similar spread and range indicating the the PPM captured the natural variation of the predictor. There do not appear to be any apparent clusters or extreme deviation among the imputed points suggesting no bias was introdcued to the dataset. The presence of higher protein consumption outliers in both observed and imputed data further supports the validity of the imputation approach. Overall, this visualization confirms that the missing values were imputed in a manner consistent with the original data distribution.
+
+
+```{r}
+
+stripplot(imp_model, BMXBMI, pch = 20, cex = 1.2)
+
+```
+The strip plot for `BMXBMI` shows a similar consistency as the `DR2TPROT` plot suggesting the chosen imputation method captured the structure of the data successfully. There are no apparent clusters or extreme deviations in the data suggesting no artificial bias. 
+
+The imputed dataset will be extracted.
+
+```{r ChosingImp}
+
+NH_data_imp <- complete(imp_model)
+
+```
+
+Check for the any missing variables in the dataset
+
+```{r MissingCheckImp}
+
+sum(is.na(NH_data_imp))
+
+```
+
+The imputated dataset will be saved
+
+```{r SaveImp}
+
+saveRDS(NH_data_imp, here("data", "processed", "NH_data_imputed.Rds"))
+
+```
+
+
+
+# Analysis 1: Difference in Protein Consumption Among Men and Women
 
 ## The Question
 
+The mean `DR2TPROT` (total protein consumption) of the male population will be compared to that of the female population. This analysis will use independent samples, as there is no direct relationship between the two groups in `RIAGENDR` that would influence each others `DR2TPROT` values. Additionally, the number of males and females in RIAGENDR is unequal, making the sample sizes unbalanced.
 
+Our research question:
 
+Is there a meaningful difference between total protein consumption between males and females?
 
+## Describing The Data
 
+```{r Numerical summary of protein for males and females}
 
+favstats(DR2TPROT ~ RIAGENDR, data = NH_data_imp) %>% gt() %>% fmt_number(decimals = 2, columns = 2:8) %>% 
+  tab_options(table.width = pct(75)) %>% 
+  cols_align(align = "center")
 
+```
 
 
+The numerical summary of total protein consumption (`DR2TPROT`) reveals notable differences between males and females. On average, males consume more protein (86.58g) than females (66.22g), with a higher median intake (80.27g vs. 60.98g) and a wider overall distribution. The interquartile range (IQR) for males (56.22g to 108.41g) is also higher compared to females (42.65g to 82.56g), suggesting greater variability in protein intake among men. The standard deviation further supports this, with males showing higher variability (43.91g) than females (34.56g). Both groups have a minimum reported intake of 0g. These results suggest a meaningful difference in protein consumption between genders, which will be further analyzed to determine statistical significance.
 
+### Graphical and Numerical Summaries
 
+The boxplot and violin plot illustrate the distribution of total protein consumption (`DR2TPROT`) for males and females using complete case analysis. The violin plot shows the overall distribution shape, while the boxplot provides key summary statistics, including the median, interquartile range (IQR), and outliers. The notched boxplot visually represents confidence intervals around the median, helping to assess potential differences between groups.
 
+```{r Boxplot}
 
+NH_data_imp %>% ggplot(aes(x = RIAGENDR, y = DR2TPROT)) +
+  geom_violin(fill = "#FCEFDA") +
+  geom_boxplot(width = 0.3, notch = TRUE, fill = "#EF6F6C", outlier.size = 2) +
+  coord_flip() +
+  stat_summary(fun = "mean", geom = "point", shape = 23, size = 2, fill = "black") +
+  labs(title = "Protein Consumption For Males and Females",
+       x = "",
+       y = "Protein Consumed (in grams)",
+       caption = "Source: NHANES 2017-2020") -> Protein_Gender_Boxplot
 
 
+ggsave(filename = here("figures", "Protein_Gender_Boxplot.png"), plot = Protein_Gender_Boxplot, width = 12, height = 10, dpi = 300)
 
+Protein_Gender_Boxplot
 
+```
 
+The plot confirms that males generally consume more protein than females, as indicated by a higher median and mean protein intake. The spread of protein consumption is also greater for males, suggesting more variability in dietary habits. Both groups have outliers in the higher protein consumption range, which may reflect individuals with higher protein intake due to diet or lifestyle factors. This visualization reinforces the numerical summary findings and will be further examined through statistical testing.
 
 
+```{r QQ plots for each gender}
 
+# QQ plot for males
+prot_m <- NH_data_imp %>%
+  filter(RIAGENDR == "Male") %>%
+  ggplot(aes(sample = DR2TPROT)) +
+  geom_qq() +
+  geom_qq_line(col = "steelblue", lwd = 1.5) +
+  theme(aspect.ratio = 1) +
+  labs(
+    title = "Males",
+    x = "Expectation for Standard Normal",
+    y = "Protein Consumption")
 
+# QQ plot for females
+prot_f <- NH_data_imp %>%
+  filter(RIAGENDR == "Female") %>%
+  ggplot(aes(sample = DR2TPROT)) +
+  geom_qq() +
+  geom_qq_line(col = "steelblue", lwd = 1.5) +
+  theme(aspect.ratio = 1) +
+  labs(
+    title = "Females",
+    x = "Expectation for Standard Normal",
+    y = "Protein Consumption",
+    caption = "Source: NHANES 2017-2020")
 
+Protein_QQ_Plots <- prot_m + prot_f +  plot_annotation(title = "Normal Q-Q Plots for Protein Intake in Males and Females")
 
+# Save the combined plot as a high-resolution PNG
+ggsave(filename = here("figures", "Protein_QQ_Plots.png"), plot = Protein_QQ_Plots, width = 12, height = 10, dpi = 300)
 
+Protein_QQ_Plots
 
+```
 
+The Normal Q-Q plots for protein consumption (`DR2TPROT`) in males and females assess the assumption of normality by comparing the observed distribution to a theoretical normal distribution. In both groups, data points deviate significantly from the diagonal reference line, particularly at the tails, suggesting that protein intake is not normally distributed. The rightward curvature in the upper tails indicates the presence of positive skew, meaning some individuals consume substantially more protein than average. Additionally, the lower tails deviate downward, reinforcing the presence of skewness and potential outliers at both extremes. Given this non-normal distribution, non-parametric statistical methods or transformations may be necessary for further analysis.
 
 
+### BoxCox for Transformation
 
+A Box-Cox plot was used for `DR2TPROT` to address its non-normal distribution, as suggested by the Q-Q plots. Since Box-Cox transformations require strictly positive values, a small constant (0.01 grams) was added to all observations to accommodate subjects reporting 0 grams of protein intake.
 
+```{r BoxCox for protein in males and females}
 
+boxCox(lm(DR2TPROT+0.01 ~ RIAGENDR, data = NH_data_imp))
 
+```
+```{r ProBoxCox}
 
+powerTransform(lm(DR2TPROT+ 0.01 ~ RIAGENDR, data = NH_data_imp)) # 0.41
 
+```
 
 
+The Box-Cox plot suggests a transformation parameter close to 0.5, and the estimated transformation value from `powerTransform()` is 0.41, further confirming this recommendation. A power of 0.5 corresponds to a square root transformation, which will be applied to assess whether it improves normality. This transformation aims to reduce skewness and stabilize variance, making the data more suitable for parametric analyses.
 
 
+### Transformation of the Data
 
+```{r ProteinBoxCoxTrans}
 
+pp <- NH_data_imp %>%
+  ggplot(aes(x = RIAGENDR, y = sqrt(DR2TPROT))) +
+  geom_violin(fill = "#FCEFDA") +
+  geom_boxplot(width = 0.3, notch = TRUE, fill = "#EF6F6C", outlier.size = 2) +
+  coord_flip() +
+  stat_summary(fun = "mean", geom = "point", shape = 23, size = 2, fill = "black") +
+  labs(
+    title = "BoxPlot of sqrt(Protein)",
+    x = "",
+    y = "sqrt(Protein)",
+    caption = "Source: NHANES 2017-2020"
+  )
 
 
+prot_m2 <- NH_data_imp %>%
+  filter(RIAGENDR == "Male") %>%
+  ggplot(aes(sample = sqrt(DR2TPROT))) +
+  geom_qq() +
+  geom_qq_line(col = "steelblue", lwd = 1.5) +
+  theme(aspect.ratio = 1) +
+  labs(
+    title = "Males",
+    x = "Expectation for Standard Normal",
+    y = "sqrt(Protein)"
+  )
 
 
+prot_f2 <- NH_data_imp %>%
+  filter(RIAGENDR == "Female") %>%
+  ggplot(aes(sample = sqrt(DR2TPROT))) +
+  geom_qq() +
+  geom_qq_line(col = "steelblue", lwd = 1.5) +
+  theme(aspect.ratio = 1) +
+  labs(
+    title = "Females",
+    x = "Expectation for Standard Normal",
+    y = "sqrt(Protein)"
+  )
 
 
+sqrt_Protein_Plots <- pp + (prot_m2 / prot_f2)
 
+ggsave(filename = here("figures", "sqrt_Protein_Plots.png"), plot = sqrt_Protein_Plots, width = 12, height = 10, dpi = 300)
 
+sqrt_Protein_Plots
 
+```
 
+The BoxPlot and Q-Q plots visualize the effects of applying a square root transformation to total protein consumption (`DR2TPROT`). The transformation was performed based on the Box-Cox analysis, which suggested a transformation parameter close to 0.5. The violin-boxplot shows that while the transformed data remains slightly skewed, the distribution appears more symmetric compared to the original scale. The Q-Q plots for males and females indicate improved normality, with data points aligning more closely with the diagonal reference line. However, slight deviations persist in the lower and upper tails, suggesting that while the transformation reduces skewness, perfect normality is not achieved. This transformation will enhance the validity of parametric statistical tests by stabilizing variance and making the distribution more suitable for further analysis.
 
 
+### Variance and Normality Checks
 
+To determine whether the assumption of equal variances holds between males and females, we perform Levene’s test on the square root-transformed `DR2TPROT` values.
 
 
+```{r ProtLevene}
 
+leveneTest(sqrt(DR2TPROT) ~ RIAGENDR, data = NH_data_imp)
 
+```
 
+To assess whether protein consumption for each group follows a normal distribution after transformation, we apply the Shapiro-Wilk test to the square root-transformed values.
 
 
+```{r}
 
+# Ensure the variable is numeric
+shapiro.test(NH_data_imp %>% filter(RIAGENDR == "Male") %>% pull(DR2TPROT) %>% sqrt())
 
+```
+```{r}
 
+shapiro.test(NH_data_imp %>% filter(RIAGENDR == "Female") %>% pull(DR2TPROT) %>% sqrt())
 
+```
 
 
+The results indicate that Levene’s test is highly significant (p < 0.001), meaning the assumption of equal variances is violated, requiring the use of Welch’s t-test instead of a pooled-variance t-test. Additionally, the Shapiro-Wilk test results for both males (p = 8.66e-14) and females (p < 2.2e-16) suggest strong deviations from normality, even after transformation. Given these findings, a non-parametric alternative (such as bootstrapping) remains the most robust approach for comparing protein consumption between genders.
 
+## Main Analysis
 
+```{r bootstrap}
 
+set.seed(444)
 
+male_pro <- NH_data_imp %>% filter(RIAGENDR == "Male") %>% pull(DR2TPROT)
+female_pro <- NH_data_imp %>% filter(RIAGENDR == "Female") %>% pull(DR2TPROT)
 
+boot.t.test(x = male_pro, y = female_pro, alternative = 'two.sided', conf.level = 0.95, paried = FALSE, var.equal = FALSE, R = 10000)
 
+```
 
+The bootstrapped Welch two-sample t-test was conducted to compare the mean protein consumption (`DR2TPROT`) between males and females. Using 10000 bootstrap resamples, the bootstrap p-value was < 0.0001, indicating a statistically significant difference in protein intake between genders. The bootstrap estimate of the mean difference was 20.34 grams (SE = 0.90), with a 95% confidence interval (18.58g, 22.08g), suggesting that males consistently consume more protein than females.
 
 
+## Conclusions
 
+The results of the bootstrapped two-sample t-test provide strong evidence that males consume significantly more protein than females. With 10,000 bootstrap resamples, the estimated mean difference in protein intake was 20.34 grams (SE = 0.90), and the 95% confidence interval (18.58g, 22.08g) confirms that this difference is unlikely due to random variation. The bootstrap p-value (< 0.0001) further supports the statistical significance of this finding. Since bootstrapping does not rely on normality or equal variance assumptions, these results are robust and reliable, reinforcing the conclusion that males have a consistently higher protein intake compared to females.
 
+One limitation of our analysis is that `DR2TPROT` only reflects total protein consumption for a single day, which may not accurately represent an individual's long-term dietary habits. Daily protein intake can vary due to lifestyle factors or temporary dietary choices, meaning our estimates may not fully capture habitual protein consumption patterns between gender. Additionally, we did not account for dietary reporting bias, where individuals may under report or over report their intake. Future research should consider analyzing multiple days of dietary intake or incorporating habitual dietary assessment methods to obtain a more accurate picture of protein consumption trends.
 
 
+# Analysis 2: Comparing 5 Population Means with Independent Samples
 
+## The Question
 
+This analysis will use the variables `DBQ750` and `BMXBMI` to compare the mean BMI (`BMXBMI`) across different groups based on how frequently individuals read nutrition labels before purchasing food items. The five groups represent individuals who always, most of the time, sometimes, rarely, or never read nutrition labels. These groups are independent, meaning that an individual's frequency of reading nutrition labels has no effect on the BMI of other subjects. To compare the groups, an analysis of variance and 95% confidence intervals will be used.
 
+Research Question: Is there an association between an individual's BMI and the frequency with which they read nutrition labels on food products before purchasing them?
 
+## Describing The Data
 
+### Numerical Summary
 
+To begin, we examine the numerical summary of BMI (`BMXBMI`) across the five groups categorized by nutrition label reading frequency (`DBQ750`).
 
+```{r Numrtical Summary of bmi by nutrition label}
 
+favstats(BMXBMI ~ DBQ750, data = NH_data_imp) %>% gt() %>% fmt_number(decimals = 2, columns = 2:8) %>% 
+  tab_options(table.width = pct(75)) %>% 
+  cols_align(align = "center")
 
+```
 
+
+The mean BMI across groups is relatively similar, with the "Sometimes" group having the highest mean BMI (30.76) and the "Never" group having the lowest (29.00). This pattern is also reflected in the median values, where individuals who sometimes read nutrition labels have the highest median BMI (29.40), while those who never read them have the lowest (27.90). In all groups, the mean BMI is higher than the median, indicating that the distributions are right-skewed, with a subset of individuals having higher BMI values. The standard deviations range from 6.80 to 8.09, suggesting some variability in BMI within each group. Furthermore, the number of subjects in each category varies, with the "Sometimes" group having the largest sample size (n = 2771) and the "Never" group having the smallest (n = 917). The unequal sample sizes further confirm that subjects are independent across groups, ensuring validity in comparing their BMI distributions.
+
+### Graphical Summaries
+
+A Box plot and violin plot will be used to examine the distribution of BMI (`BMXBMI`) across the five groups categorized by nutrition label reading frequency (`DBQ750`) to compare their spread and central tendencies.
+
+```{r Boxplot and violin of bmi nutritional label}
+
+NH_data_imp %>% ggplot(aes(x = DBQ750, y = BMXBMI, fill = DBQ750)) +
+  geom_violin() +
+  geom_boxplot(width = 0.3, notch = TRUE, outlier.size = 2, fill = "#EAEBEE") +
+  coord_flip() +
+  stat_summary(fun = "mean", geom = "point", shape = 23, size = 2, fill = "black") +
+  theme(legend.position = "none") +
+  scale_fill_manual(values = c("#6C756B", "#93ACB5", "#96C5F7", "#A9D3FF", "#F2F4FF")) +
+  labs(title = "BMI for Each Nutritional Label Reading Frequency Group",
+       x = "Label Group",
+       y = expression(paste("BMI (kg/m"^2, ")")),
+       caption = "Source: NHANES 2017-2020") -> BMI_Label_Plot
+
+ggsave(filename = here("figures", "BMI_Label_Plot.png"), plot = BMI_Label_Plot,width = 12, height = 10, dpi = 300)
+
+BMI_Label_Plot
+
+```
+
+The violin and boxplots reveal that each group has a considerable number of outliers at the higher end of BMI, which helps explain the higher means observed in the numerical summary. The "Sometimes" group has the widest distribution of BMI values, indicating greater variability compared to the other groups. In contrast, the "Never" group has the smallest range, suggesting more consistency in BMI values within this group. Despite these differences in distribution spread, the median BMI values are relatively close across all groups, and the notches in the boxplot indicate there is not a difference in the the median BMI for each group. 
+
+
+```{r QQ plots}
+
+NH_data_imp %>% ggplot(aes(sample = BMXBMI)) +
+  geom_qq() +
+  geom_qq_line(col = "steelblue", lwd = 1.5) +
+  theme(aspect.ratio = 1) +
+  labs(title = "Q-Q Plot of Body Mass Index by Nutrition Label Reading Frequency",
+       x = "Expectation for Standard Normal ",
+       y = "BMI") + facet_wrap(~DBQ750) -> BMI_QQ
+
+ggsave(filename = here("figures", "BMI_Label_Plot.png"), plot = BMI_QQ ,width = 12, height = 10, dpi = 300)
+
+BMI_QQ
+
+```
+
+The Q-Q plots reveal that BMI (`BMXBMI`) is not normally distributed across any of the five nutrition label reading groups. In all cases, the data deviates from the reference line, particularly in the upper tail, indicating strong right-skewness. This suggests that a subset of individuals in each group have significantly higher BMI values than expected under normality. To account for this deviation from normality, non-parametric methods may be considered (e.g., Kruskal-Wallis or bootstrapping). Additionally, a transformation will be considered.
+
+### Exploring a Transformation
+
+```{r Boxcox for BMI and label groups }
+
+boxCox(lm(BMXBMI ~ DBQ750, data = NH_data_imp)) 
+
+```
+
+
+```{r}
+
+powerTransform(lm(BMXBMI ~ DBQ750, data = NH_data_imp)) 
+
+```
+
+
+The BoxCox plot and maximum likelihood ratio points to a transformation of -0.5 indicating an inverse square root transformation for our outcome variable BMI (`BMXBMI`). 
+
+### Transforming the Data
+
+
+```{r log transformed plot of the labels}
+
+NH_data_imp %>% ggplot(aes(x = DBQ750, y = BMXBMI, fill = DBQ750)) +
+  geom_violin() +
+  geom_boxplot(width = 0.3, notch = TRUE, outlier.size = 2, fill = "#EAEBEE") +
+  coord_flip() +
+  stat_summary(fun = "mean", geom = "point", shape = 23, size = 2, fill = "black") +
+  theme(legend.position = "none") +
+  scale_fill_manual(values = c("#6C756B", "#93ACB5", "#96C5F7", "#A9D3FF", "#F2F4FF")) +
+  labs(title = "Sqrt(BMI) for Each Nutritional Label Reading Frequency Group",
+       x = "Label Group",
+       y = expression(paste("Sqrt(BMI) (kg/m"^2, ")")),
+       caption = "Source: NHANES 2017-2020") -> Sqrt_BMI_Label_Plot
+
+ggsave(filename = here("figures", "Sqrt_BMI_Label_Plot.png"), plot = Sqrt_BMI_Label_Plot ,width = 12, height = 10, dpi = 300)
+
+Sqrt_BMI_Label_Plot
+
+```
+The square root transformation was applied to BMI (`BMXBMI`) to address the previously observed right skewness in its distribution. Compared to the untransformed version, the spread of values is more compressed, and the right tail has been reduced, indicating a moderate improvement in normality. However, some degree of asymmetry and high-value outliers still persist, particularly in the "Sometimes" and "Rarely" groups. The general ranking of median BMI across groups remains unchanged, with the "Sometimes" group exhibiting the widest range, while the "Never" group has the narrowest distribution.
+
+
+
+```{r density histogram of log bmi}
+
+NH_data_imp %>% ggplot(aes(x = sqrt(BMXBMI), fill = DBQ750)) +
+  geom_histogram(aes(y = after_stat(density)), col = "black", bins = 20) +
+  scale_fill_manual(values = c("#6C756B", "#93ACB5", "#96C5F7", "#A9D3FF", "#F2F4FF")) +
+  stat_function(fun = dnorm, args = list(mean = mean(sqrt(NH_data_imp$BMXBMI), na.rm = TRUE), 
+                                         sd = sd(sqrt(NH_data_imp$BMXBMI), na.rm = TRUE)), col = "red", lwd = 1.2) +
+  scale_y_continuous(expand = c(0,0)) +
+  guides(fill = "none") +
+  labs(title = "Density Histogram of sqrt(BMI) for Each Nutrition Label Group",
+       subtitle = 'Imposed with Normal Density',
+       x = expression(paste("log BMI (kg/m"^2, ")")),
+       y = "Density",
+       caption = "Source: NHANES 2017-2020") + facet_wrap(~DBQ750) -> Sqrt_BMI_Density_Plot
+
+ggsave(filename = here("figures", "Sqrt_BMI_Density_Plot.png"), plot = Sqrt_BMI_Density_Plot ,width = 12, height = 10, dpi = 300)
+
+Sqrt_BMI_Density_Plot
+
+```
+
+The density histograms display the distribution of square root transformed BMI (`BMXBMI`) for each nutrition label reading frequency group (DBQ750), overlaid with a normal density curve (red). The transformation has improved symmetry, bringing the distributions closer to normality, but some deviations remain. Across all groups, the histograms generally align with the normal curve in the center, suggesting that the majority of individuals follow an approximately normal distribution. However, the tails show some departures from normality, particularly in the upper range, where mild right-skewness is still present. The "Sometimes" and "Rarely" groups exhibit more noticeable right tails, indicating a subset of individuals with higher BMI values. Additionally, the "Never" and "Always" groups appear to have slightly narrower distributions, suggesting lower variance in BMI within these groups. This could be a potential indication of dissimlar variance within each of the groups. 
+
+### Variance Check
+
+
+```{r BMI_Var}
+
+
+variance_summary <- NH_data_imp %>% group_by(DBQ750) %>% summarise(Variance = var(sqrt(BMXBMI), na.rm = TRUE))
+
+
+variance_summary %>% gt() %>% fmt_number(decimals = 2) %>% 
+  tab_options(table.width = pct(75)) %>% 
+  cols_align(align = "center")
+
+```
+
+The table presents the calculated variance of sqrt(BMI) (`BMXBMI`) for each nutrition label reading frequency group (`DBQ750`). the values are now lower and more similar across groups, ranging from 0.37 ("Never" group) to 0.48 ("Sometimes" group"). The "Sometimes" group still has the highest variability, while the "Never" group has the lowest, mirroring the pattern seen in the untransformed data but with more compressed variance differences.
+
+
+```{r}
+
+leveneTest(sqrt(BMXBMI) ~ DBQ750, data = NH_data_imp)
+
+```
+The result of the Levene's test is statistically significant (p < 0.001), meaning there is strong evidence that the variances are not equal across groups. This violation of the homogeneity of variance assumption is important because parametric tests such as ANOVA assume equal variances. Given this result, adjustments or alternative methods may be necessary, such as Welch’s ANOVA, which accounts for unequal variances, or non-parametric approaches like the Kruskal-Wallis test.
+
+## Main Analysis
+
+### Analysis of Variance
+
+Given that Levene’s test remained significant even after applying the square root transformation, we concluded that variance differences across groups persist. Additionally, previous normality checks (e.g., Q-Q plots and density histograms) confirmed that BMI (`BMXBMI`) is not normally distributed across nutrition label reading groups. Since ANOVA assumes both normality and equal variances, and Welch’s ANOVA, while robust to variance differences, still assumes normality, we opted for the Kruskal-Wallis test. This non-parametric test does not require normality or homogeneity of variance, making it the best choice for analyzing differences in median BMI across groups. To keep interpretation straightforward, we will apply the Kruskal-Wallis test to the untransformed BMI variable.
+
+
+```{r krus_bmi}
+
+krus_bmi <- kruskal.test(BMXBMI ~ DBQ750, data = NH_data_imp)
+krus_bmi
+
+```
+
+The Kruskal-Wallis test was conducted to compare median BMI (`BMXBMI`) across the five nutrition label reading frequency groups (`DBQ750`). The test yielded a statistically significant result (χ^2^ = 37.175, df = 4, p < 0.0001), indicating that at least one group differs in median BMI. However, the test does not specify which groups are significantly different from each other. To determine which specific group differences are driving this result, we will conduct a Dunn’s post hoc test with a Bonferroni correction for multiple comparisons.
+
+
+```{r Dunn_Bmi}
+
+dunn_BMI <- dunnTest(BMXBMI ~ DBQ750, data = NH_data_imp, method = "bonferroni")
+dunn_BMI 
+```
+
+
+Following the significant Kruskal-Wallis test, a Dunn’s post hoc test with Bonferroni correction was conducted to determine which specific groups differ in median BMI (`BMXBMI`) based on nutrition label reading frequency. The results indicate that individuals who never read nutrition labels have a significantly different median BMI compared to those who sometimes read them (p < 0.0001). Additionally, those who always read nutrition labels also have significantly different median BMI compared to the sometimes group (p = 0.0045). Other comparisons, such as "Most of the time" vs. "Never" (p = 0.023) and "Rarely" vs. "Sometimes" (p = 0.298), were not statistically significant after adjusting for multiple comparisons. These findings suggest that BMI differences are more pronounced when comparing individuals at the extremes of nutrition label reading habits, particularly between those who never or always check labels and those who fall into the sometimes category. However, the differences between other intermediate groups are less distinct.
+
+## Conclusions
+
+Our analysis found detectable differences in BMI based on the frequency of reading nutrition labels.
+
+Instead of ANOVA, we used the Kruskal-Wallis test, which confirmed a statistically significant difference in median BMI across the nutrition label reading groups (χ^2^ = 37.175, p < 0.0001). To identify which groups were driving this difference, we conducted a Dunn’s post hoc test with Bonferroni correction. The results revealed that significant differences were observed between the Never vs. Sometimes (p < 0.0001) and Always vs. Sometimes (p = 0.0045) groups. This suggests that individuals who sometimes read nutrition labels have a significantly different median BMI compared to those who never or always read them.
+
+Interestingly, individuals who never read nutrition labels had a lower median BMI compared to those in the sometimes category, while those who always read labels also had a significantly different median BMI compared to the sometimes group. However, other comparisons, such as Never vs. Most of the Time (p = 0.023) and Rarely vs. Sometimes (p = 0.298), were not statistically significant. These findings indicate that BMI differences are more pronounced at the extremes of label-reading frequency rather than among intermediate groups.
+
+Overall, the results suggest that nutrition label reading frequency is associated with differences in BMI, but the relationship may not be strictly linear. Further research is needed to explore the underlying factors driving these differences, such as dietary habits, health awareness, or socioeconomic influences.
 
 
 
