@@ -23,7 +23,9 @@ This analysis aimed to determine whether males consume significantly more protei
 
 This analysis aimed to determine whether there was a difference in the BMI of individuals based on how often they read the nutrition label of food. Our analysis found statistically significant differences in BMI based on nutrition label reading frequency (Kruskal-Wallis: χ² = 37.175, p < 0.0001). Dunn’s post hoc test revealed that BMI differed significantly between the Never vs. Sometimes (p < 0.0001) and Always vs. Sometimes (p = 0.0045) groups, suggesting that individuals who sometimes read nutrition labels have a different median BMI than those who never or always read them. Other comparisons were not statistically significant. These findings suggest a non-linear relationship between label reading habits and BMI, warranting further investigation into potential behavioral and socioeconomic influences.
 
-## Analysis 3: 
+## Analysis 3: Drinking Habitis between Genders
+
+This analysis aimed to determined whether there was an association between gender and self-reported past heavy drinking. By performing a 2x2 analysis with Bayesian augmentation, our analysis found a significant association between gender and self-reported past heavy drinking (exact p-value < 0.0001). Males were 1.61 times more likely to report a history of consuming four or five alcoholic drinks almost every day compared to females (RR: 1.61, 95% CI: 1.537, 1.682). The odds ratio (OR) was 3.10 (95% CI: 2.710, 3.537), indicating that males had over three times higher odds of reporting past heavy drinking than females. The absolute probability difference between genders was 26.8% (95% CI: 24.0%, 29.6%), further highlighting this disparity. 
 
 ## Analysis 4: 
 
