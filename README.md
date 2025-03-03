@@ -29,6 +29,8 @@ This analysis aimed to determined whether there was an association between gende
 
 ## Analysis 4: 
 
+This analysis aimed to determined whether there was an association between education level and how often an individual reads nutrition labels.  The Pearson's chi-squared test provided strong evidence of an association between educational attainment and nutrition label reading frequency. The association plot further highlighted key differences, showing that college graduates were more likely than expected to read nutrition labels frequently, particularly in the "always" and "most of the time" categories, while those with lower educational attainment were less likely to do so. Individuals with less than a 9th-grade education had a significantly higher-than-expected frequency in the "never" and "rarely" categories, indicating a trend where higher education levels correlate with more frequent nutrition label usage. These findings suggest that education may play a role in shaping consumer health behaviors, particularly in making informed dietary choices.
+
 # Future Work
 
 

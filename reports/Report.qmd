@@ -11,6 +11,11 @@ format:
     embed-resources: true
     code-overflow: wrap
     theme: default
+  pdf:
+    toc: true
+    number-sections: true
+    documentclass: article
+    keep-tex: true
 ---
 
 # Setup and Data Ingest
@@ -31,6 +36,7 @@ library(mice)
 library(Hmisc)
 library(MKinfer)
 library(janitor)
+library(tinytex)
 library(naniar)
 library(Epi)
 library(epiR)
@@ -1057,38 +1063,175 @@ A limitation of our analysis is that for the female subjects who reported a hist
 # Analysis 4: 
 ## The Question
 
+We are interested in exploring whether an individual's highest level of educational attainment is associated with how frequently they read nutrition labels on food products before making a purchase. To investigate this, we will use the DMDEDUC2 and DBQ750 variables from the NHANES 2017-2020 dataset. DMDEDUC2 represents the highest level of education attained, categorized into five levels: Less than 9th grade, 9-11th grade, High school/GED or equivalent, Some college or an AA degree, and College graduate or above. DBQ750 measures how often a subject reads the nutrition label before purchasing a food item, with responses classified as Always, Most of the time, Sometimes, Rarely, or Never.
+
+Our research question: Is there an association between an individual's level of education and how frequently they read nutrition labels on food products before purchasing them?
+
+
+## Describing The Data
+
+### The 5x5 Table
+
+We will start by examining the total counts and percentages for each group. 
+
+```{r 5 by 5 table for eduction and labels}
+
+NH_data_imp %>% tabyl(DMDEDUC2, DBQ750) %>% 
+  adorn_totals(where = "row") %>% 
+  adorn_percentages(denominator = "row") %>% 
+  adorn_pct_formatting() %>% 
+  adorn_ns(position = "front") %>%
+  adorn_title(placement = "combined") %>% 
+  gt() %>% tab_options(table.width = pct(100)) %>% cols_align(align = "center")
+
+```
+
+
+For this analysis, we aimed to ensure that each cell contained a minimum of 15 observations to meet assumptions for statistical tests. From the table, we observe that all education levels have sufficient sample sizes across the five nutrition label reading frequency categories. The highest proportion of individuals who always read nutrition labels are those with a college degree or above (17.7%), while the highest proportion of individuals who never read nutrition labels are those with less than a 9th-grade education (25.6%).
+
+Additionally, the sometimes category consistently has the largest number of individuals across all education levels, with proportions ranging from 29.7% (less than 9th grade) to 36.7% (9-11th grade). This suggests that the majority of individuals, regardless of education level, tend to read nutrition labels only sometimes rather than always or never. However, there appears to be a trend where higher education levels correspond to a greater likelihood of frequently reading nutrition labels.
+
+The smallest observed count is 70 individuals in the college graduate group who reported never reading nutrition labels (3.6%), while the largest observed count is 926 individuals in the some college/AA degree group who reported reading nutrition labels sometimes (36.0%). These findings indicate a potential association between education level and frequency of reading nutrition labels, which will be further examined through statistical testing.
+
+## Main Analysis
+
+### Creating the Table for Analysis
+
+A matrix will be created with the values in our 5 by 5 table for analysis:
+
+```{r}
+
+
+edu_tab <- matrix(c(111,  61, 179,  97, 154,  
+                    130, 115, 310, 118, 171,  
+                    238, 350, 684, 309, 289,  
+                    391, 668, 926, 352, 233,  
+                    348, 716, 672, 161,  70), 
+                  ncol = 5, nrow = 5, byrow = TRUE) 
+
+
+rownames(edu_tab) <- c("Less Than 9th Grade", "9-11th Grade", "High School/GED or Equivalent", 
+                        "Some College or AA degree", "College Graduate or above") 
+colnames(edu_tab) <- c("Always", "Most of the time", "Sometimes", "Rarely", "Never")
+
+
+edu_tab
 
 
 
 
 
+```
+
+### The Pearson $\chi^2$ Test
+
+We conducted a Pearson’s Chi-Square test to assess whether there is an association between education level (`DMDEDUC2`) and nutrition label reading frequency (`DBQ750`). This test was chosen over Fisher’s exact test, which is generally more appropriate for smaller sample sizes, whereas the Pearson Chi-Square test is more reliable for larger contingency tables like ours.
+
+```{r The Chi-square test}
+
+chisq.test(edu_tab)
+
+```
+
+
+The Chi-Square test statistic gives is a $\chi^2$ 620.88 with 16 degrees of freedom, yielding a p-value < 2.2e-16. Since the p-value is extremely small, we have strong statistical evidence to reject the null hypothesis, which assumes that education level and nutrition label reading frequency are independent. Instead, these results suggest a significant association between an individual’s education level and how frequently they read nutrition labels before purchasing food products. We will perform a post-hoc test to determine where the significant differences lie. 
+
+
+### The Cochran Conditions
+
+To validate the assumptions of the Pearson’s Chi-Square test, we examine the expected counts for each cell in our 5x5 contingency table.
+
+```{r Expected counts }
+
+expcount <- NH_data_imp %>% tabyl(DMDEDUC2, DBQ750) %>% chisq.test()
+
+expcount$expected %>% gt() %>% tab_options(table.width = pct(100)) %>% cols_align(align = "center") %>% fmt_number(decimals = 2)
+
+```
+
+The Cochran conditions require that:
+
+* No cells have an expected count of zero
+* At least 80% of the expected counts are 5 or greater
+
+
+From our table, we confirm that no cells have expected counts of zero and the smallest expected count in our table is 70.30, which is well above the threshold of 5. Since all conditions are met, we can confidently rely on the results of Pearson’s Chi-Square test. This ensures that our test statistic is valid, and the association between education level and nutrition label reading frequency is not influenced by violations of assumption.
+
+
+### The Association Plot and Table for the 5x5 Table
+
+
+```{r assocation plot}
+
+assocplot(edu_tab)
+
+```
+
+The association plot visually represents the relationship between education level (`DMDEDUC2`) and nutrition label reading frequency (`DBQ750`), highlighting deviations from expected counts. Black bars indicate a higher-than-expected frequency, while red bars indicate a lower-than-expected frequency. The plot shows that individuals with some college or an AA degree are more likely to always read nutrition labels than expected, while those with less than a 9th-grade education are significantly less likely to do so. Similarly, individuals with lower education levels are more likely to rarely or never read nutrition labels, whereas those with higher education levels are less likely to fall into the "Rarely" and "Never" categories. The size of the bars indicates the strength of these deviations, with larger bars reflecting more substantial differences. Overall, the plot reinforces the significant association between education level and nutrition label reading behavior, supporting the conclusion that higher education levels are associated with more frequent nutrition label reading, while lower education levels are linked to less frequent use of nutrition labels.
+
+The following table presents the percent difference between the observed and expected frequencies for the relationship between education level (`DMDEDUC2`) and nutrition label reading frequency (`DBQ750`). Positive values indicate that the observed frequency is higher than expected, whereas negative values indicate that the observed frequency is lower than expected.
+
+```{r observed minus expected frequency table}
+
+obs <- matrix(c(62,28,109,51,70,
+                79,82,207,85,115,
+                168,249,488,219,206,
+                311,525,713,282,181,
+                265,566,539,128,53), ncol = 5, nrow = 5, byrow = TRUE) 
+
+
+exp <- matrix(c(48.99,80.26,113.81,42.35,34.60,
+                86.95,142.47,202.01,75.16,61.41,
+                203.61,333.59,473.01,176,143.79,
+                308.01,504.65,715.56, 266.25,217.52,
+                237.44,389.02,551.61,205.24,167.68), ncol = 5, nrow = 5, byrow = TRUE) 
+
+freq_table <- ((obs - exp)/exp) *100
+
+freq_table <- as_tibble(freq_table)
+
+rows_names <- c("Less Than 9th Grade", "9-11th Grade", "High School/GED or Equivalent", "Some College or AA degree", "College Graduate or above") 
+
+tbs_1 <- tibble(Education = rows_names,
+        Always = freq_table[[1]],
+       `Most of the Time` = freq_table[[2]],
+       `Sometimes` = freq_table[[3]],
+       `Rarely` = freq_table[[4]],
+       `Never` = freq_table[[5]])
+
+tbs_1 %>% gt() %>% tab_options(table.width = pct(100)) %>% cols_align(align = "center") %>% fmt_number(decimals = 2) %>% cols_label(Education = "")
+
+```
+
+
+From the table, we observe that college graduates and those with some college education have a higher observed frequency of reading nutrition labels before purchasing a food product and are less likely to read the label only sometimes, rarely, or never. Conversely, individuals with a high school education or less are generally less likely to read nutrition labels frequently, except for those with less than a 9th-grade education, who show an unexpectedly higher frequency of reading labels always. These findings further support the association between education level and nutrition label reading behavior, indicating that higher education is linked to more frequent nutrition label usage.
+
+
+## Conclusions
+
+
+The test statistic and p-value from the Pearson's chi-squared test provide sufficient evidence to conclude that educational attainment and the frequency of reading nutrition labels are significantly associated. From the association plot, we observed that college graduates had observed frequencies 17.7% and 36.4% higher than expected for the "always" and "most of the time" categories, respectively. Additionally, this group had lower-than-expected frequencies of -34.2%, -37.5%, and -68.3% for the "sometimes", "rarely", and "never" categories, respectively, suggesting that higher education is linked to more frequent nutrition label usage.
+
+In contrast, individuals with less than a 9th-grade education had an observed frequency 25.6% higher than expected for the "never" group and 16.1% higher for the "rarely" group, indicating a lower likelihood of regularly reading nutrition labels. These findings provide strong evidence that education level is associated with nutrition label reading frequency, with higher educational attainment being linked to more frequent label use.
+
+A limitation of this study is the imbalance in group sizes, where some educational categories had significantly more participants than others. To strengthen the reliability of our findings, future research could aim for a more balanced sample across education levels to improve the statistical power of the analysis and minimize potential biases.
+
+# Session Information
 
 
 
 
+```{r pdf}
 
+quarto::quarto_render("Analysis.qmd", output_format = "pdf")
 
+```
 
+```{r Session info}
 
+sessionInfo()
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+```
 
 
 
