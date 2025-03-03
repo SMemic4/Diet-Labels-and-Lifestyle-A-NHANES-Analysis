@@ -13,19 +13,23 @@ The data used in this analysis comes from the National Health and Nutrition Exam
 # Data preprocessing 
 
 1. Filtering the Population of Interest
+
 ** Participants aged 21-79 were selected (`RIDAGEYR`).
 ** Only individuals who completed both the NHANES examination and interview (RIDSTATR == "Completed Examination and Interview") were included.
 ** Handling Missing Data
 
 2. Multiple Imputation was performed on missing values for continuous variables (DR2TPROT for total protein intake and BMXBMI for BMI).
+
 ** Categorical variables (DBQ750, DMDEDUC2, ALQ151) were analyzed for missingness before inclusion in statistical models.
 ** Data Cleaning and Transformation
 
 3. Variables were renamed and reformatted for consistency.
+
 ** Categories were consolidated where appropriate (e.g., grouping education levels and label-reading frequencies for meaningful comparisons).
 ** Data Encoding for Analysis
 
 4. Numerical Check.
+
 ** Creating numerical summaries to ensure all variables are accurate
 
 
