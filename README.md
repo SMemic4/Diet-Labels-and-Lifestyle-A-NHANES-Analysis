@@ -25,7 +25,7 @@ The data used in this analysis comes from the National Health and Nutrition Exam
 ** Categories were consolidated where appropriate (e.g., grouping education levels and label-reading frequencies for meaningful comparisons).
 ** Data Encoding for Analysis
 
-4. Numerical Check
+4. Numerical Check.
 ** Creating numerical summaries to ensure all variables are accurate
 
 
