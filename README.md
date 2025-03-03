@@ -4,14 +4,29 @@ This project uses NHANES data to explore the relationships between gender, nutri
 
 # Introduction
 
-
+This project analyzes dietary habits, nutritional label reading frequency, and lifestyle factors using data from the NHANES 2017-2020 survey. The primary objective is to examine potential associations between demographic and behavioral variables, such as protein consumption, BMI, alcohol consumption, and education level, with individuals' dietary awareness and lifestyle choices. Statistical methods, including bootstrap hypothesis testing, Kruskal-Wallis tests, chi-square tests, and Bayesian augmentation, are used to assess relationships between categorical and numerical variables.
 
 # Data Source
 
-
+The data used in this analysis comes from the National Health and Nutrition Examination Survey (NHANES) 2017-2020, a large, nationally representative dataset collected by the Centers for Disease Control and Prevention (CDC). NHANES combines interviews, physical examinations, and laboratory tests to provide comprehensive health and nutritional data for individuals in the United States. The dataset includes demographic information, dietary intake, and self-reported behavioral patterns related to health and nutrition.
 
 # Data preprocessing 
 
+1. Filtering the Population of Interest
+** Participants aged 21-79 were selected (`RIDAGEYR`).
+** Only individuals who completed both the NHANES examination and interview (RIDSTATR == "Completed Examination and Interview") were included.
+** Handling Missing Data
+
+2. Multiple Imputation was performed on missing values for continuous variables (DR2TPROT for total protein intake and BMXBMI for BMI).
+** Categorical variables (DBQ750, DMDEDUC2, ALQ151) were analyzed for missingness before inclusion in statistical models.
+** Data Cleaning and Transformation
+
+3. Variables were renamed and reformatted for consistency.
+** Categories were consolidated where appropriate (e.g., grouping education levels and label-reading frequencies for meaningful comparisons).
+** Data Encoding for Analysis
+
+4. 
+** Creating numerical summaries to ensure all variables are accurate
 
 
 # Results Summary
@@ -33,6 +48,8 @@ This analysis aimed to determined whether there was an association between educa
 
 # Future Work
 
+This study identified significant associations between dietary habits, educational attainment, and lifestyle factors using NHANES data. Future research could focus on longitudinal analyses to assess how these relationships change over time. Additionally, incorporating machine learning models could provide deeper insights into predictive patterns of dietary behavior. Expanding the analysis to include socioeconomic factors and geographic disparities may further enhance our understanding of the determinants of health-related behaviors.
 
 # Source
 
+[CDC National Center for Health Statistics](https://www.cdc.gov/nchs/nhanes/)
